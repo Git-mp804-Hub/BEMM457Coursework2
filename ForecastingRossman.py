@@ -1,3 +1,4 @@
+# This was a first test for using forecasting to a demand set, this is useless now.
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
