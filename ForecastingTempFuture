@@ -1,0 +1,41 @@
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+NSW_elec_daily = pd.read_csv('TempTest.csv')
+NSW_elec_daily['Date'] = pd.to_datetime(NSW_elec_daily['Date'])
+future_dates = pd.date_range(NSW_elec_daily['Date'].max() + pd.Timedelta(days=1), periods=30)
+constant_temp = 30
+NSW_elec_future = pd.DataFrame({'Date': future_dates, 'MaxTemp': constant_temp})
+comparison = pd.merge(NSW_elec_daily[['Date', 'Demand', 'MaxTemp']], NSW_elec_future, on='Date', how='outer') #combining future temp and actual temp
+comparison['MaxTemp'] = comparison['MaxTemp_x'].fillna(comparison['MaxTemp_y'])
+comparison.drop(columns=['MaxTemp_x', 'MaxTemp_y'], inplace=True)
+comparison['Demand'] = pd.to_numeric(comparison['Demand'], errors='coerce')
+comparison['MaxTemp'] = pd.to_numeric(comparison['MaxTemp'], errors='coerce')
+comparison['MaxTemp'].fillna(constant_temp, inplace=True)
+print(comparison)
+
+y = comparison['Demand']
+X = comparison[['MaxTemp']]
+X = sm.add_constant(X) 
+print("Shape of X (training):", X.shape)
+
+sarimax_model = SARIMAX(y, exog=X, order=(5, 1, 1), seasonal_order=(1, 1, 1, 26))
+sarimax_results = sarimax_model.fit() #fitting the first chunk
+future_X = sm.add_constant(NSW_elec_future[['MaxTemp']], has_constant='add') 
+print(future_X)
+print("Shape of future_X (forecasting):", future_X.shape)
+forecast = sarimax_results.get_forecast(steps=30, exog=future_X)
+forecast_mean = forecast.predicted_mean
+comparison.loc[comparison['Date'].isin(future_dates), 'Forecasted Demand'] = forecast_mean.values
+
+plt.figure(figsize=(10, 6))
+plt.plot(NSW_elec_daily['Date'], NSW_elec_daily['Demand'], label='Historical Demand', color='blue')
+plt.plot(future_dates, forecast_mean, label='Forecasted Demand', color='orange', linestyle='-')
+plt.title('Electricity Demand Forecast with Constant Temperature')
+plt.xlabel('Date')
+plt.ylabel('Demand (GW)')
+plt.legend()
+plt.grid(True)
+plt.show()
